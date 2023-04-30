@@ -25,9 +25,9 @@ assert torch.cuda.is_available()
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 # load le modèle
-checkpoint = torch.load('models/cifar10_resnet56.pth')
-model = resnet56(10).to(device)
-model.load_state_dict(checkpoint)
+checkpoint = torch.load('models/vgg.cifar.pretrained.pth')
+model = VGG().to(device)
+model.load_state_dict(checkpoint["state_dict"])
 
 # load les données
 NORMALIZE_DICT = {
@@ -39,11 +39,11 @@ transforms = {
         RandomCrop(image_size, padding=4),
         RandomHorizontalFlip(),
         ToTensor(),
-        Normalize(**NORMALIZE_DICT["cifar10"]),
+        #Normalize(**NORMALIZE_DICT["cifar10"]),
     ]),
     "test": Compose([
         ToTensor(),
-        Normalize(**NORMALIZE_DICT["cifar10"]),
+        #Normalize(**NORMALIZE_DICT["cifar10"]),
     ]),
 }
 
@@ -78,7 +78,8 @@ test_loader= DataLoader(
 
 # définition des paramètres 
 speed_up = 2 # basé par rapport au nombre de MACs du modèle
-epochs_finetuning = 2
+schedule = "oneshot" # oneshot, iterative
+epochs_finetuning = 100
 method = "group_norm" # random, l1, lamp, slim, group_norm, group_sl
 num_classes = 10
 global_pruning = True 
@@ -86,5 +87,5 @@ save_path = "test.pth"
 
 
 # pruning le modèle 
-optimize(model, train_loader, test_loader, speed_up, epochs_finetuning, method, num_classes, global_pruning, save_path)
+optimize(model, train_loader, test_loader, speed_up, schedule, epochs_finetuning, method, num_classes, global_pruning, save_path)
 

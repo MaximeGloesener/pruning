@@ -132,7 +132,6 @@ def train(
 # Pruner
 # définir le nbre de classses => évite de pruner la dernière couche
 def get_pruner(model, method, example_input, num_classes, global_pruning=False):
-    sparsity_learning = False
     if method == "random":
         imp = tp.importance.RandomImportance()
         pruner_entry = partial(tp.pruner.MagnitudePruner, global_pruning=global_pruning)
@@ -143,14 +142,12 @@ def get_pruner(model, method, example_input, num_classes, global_pruning=False):
         imp = tp.importance.LAMPImportance(p=2)
         pruner_entry = partial(tp.pruner.MagnitudePruner, global_pruning=global_pruning)
     elif method == "slim":
-        sparsity_learning = True
         imp = tp.importance.BNScaleImportance()
         pruner_entry = partial(tp.pruner.BNScalePruner, reg=1e-5, global_pruning=global_pruning)
     elif method == "group_norm":
         imp = tp.importance.GroupNormImportance(p=2)
         pruner_entry = partial(tp.pruner.GroupNormPruner, global_pruning=global_pruning)
     elif method == "group_sl":
-        sparsity_learning = True
         imp = tp.importance.GroupNormImportance(p=2)
         pruner_entry = partial(tp.pruner.GroupNormPruner, reg=1e-5, global_pruning=global_pruning)
     else:
@@ -173,7 +170,7 @@ def get_pruner(model, method, example_input, num_classes, global_pruning=False):
         model,
         example_input,
         importance=imp,
-        iterative_steps=200,
+        iterative_steps=50,
         ch_sparsity=1.0,
         ch_sparsity_dict=ch_sparsity_dict,
         max_ch_sparsity=1,
@@ -193,7 +190,7 @@ def progressive_pruning(pruner, model, speed_up, example_inputs):
         pruned_ops, _ = tp.utils.count_ops_and_params(
             model, example_inputs=example_inputs)
         current_speed_up = float(base_ops) / pruned_ops
-        # print(current_speed_up)
+        #print(current_speed_up)
     return current_speed_up
 
 
@@ -215,7 +212,7 @@ def progressive_pruning_fine_tuning(pruner, model, speed_up, train_loader, test_
     return current_speed_up
 
 
-def optimize(model, train_loader, test_loader, speed_up, epochs_finetuning, method, num_classes, global_pruning, save_path):
+def optimize(model, train_loader, test_loader, speed_up, schedule, epochs_finetuning, method, num_classes, global_pruning, save_path):
     # Avant pruning
     # Get the size of the first image tensor in the first batch of the DataLoader
     images, labels = next(iter(train_loader))
@@ -232,7 +229,25 @@ def optimize(model, train_loader, test_loader, speed_up, epochs_finetuning, meth
 
     speed_up = speed_up
     pruner = get_pruner(model, method, example_input, num_classes, global_pruning)
-    progressive_pruning(pruner, model, speed_up, example_input)
+    reg_path = f"regularized_model.pth"
+    if method=="slim" or method=="group_sl":
+        print('----- Regularizing -----')
+        train(
+            model,
+            train_loader=train_loader,
+            test_loader=test_loader,
+            epochs=30,
+            lr=0.01,
+            pruner=pruner,
+            save=reg_path,
+            save_only_state_dict=True,
+        )
+        model.load_state_dict(torch.load(os.path.join(os.getcwd(), "results", reg_path)))
+        model.cuda()
+    if schedule == "oneshot":
+        progressive_pruning(pruner, model, speed_up, example_input)
+    elif schedule == "iterative":
+        progressive_pruning_fine_tuning(pruner, model, speed_up, train_loader, test_loader, example_input)
     pruned_macs, pruned_params = tp.utils.count_ops_and_params(
         model, example_input)
     pruned_acc, pruned_loss = evaluate(model, test_loader)
