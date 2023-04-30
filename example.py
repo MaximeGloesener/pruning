@@ -1,25 +1,13 @@
 # Imports
-import torch.nn.functional as F
 import torch
-import torch_pruning as tp
-import os
-import copy
-import random
-import numpy as np
 import torch
-from torch import nn
 from torch.optim import *
 from torch.optim.lr_scheduler import *
 from torch.utils.data import DataLoader
 from torchvision.datasets import *
 from torchvision.transforms import *
-from tqdm.auto import tqdm
-import argparse
-from functools import partial
 from models.vgg import VGG
-from models.resnet import resnet56
 from opti import optimize
-from benchmark import benchmark
 assert torch.cuda.is_available()
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
